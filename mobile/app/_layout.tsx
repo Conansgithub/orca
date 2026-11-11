@@ -25,6 +25,8 @@ import { startPushTokenSync } from '../src/notifications/push-registration'
 import { ensureDesktopNotificationChannel } from '../src/notifications/desktop-notification-channel'
 import { loadHostCatalog } from '../src/transport/host-store'
 import { usePairingLinks } from '../src/navigation/use-pairing-links'
+import { subscribeOpenLinks } from '../src/navigation/open-links'
+import { resolveHostIdForFingerprint } from '../src/notifications/push-host-fingerprint'
 import { consumeInitialLaunchIntent } from '../src/navigation/initial-launch-intent'
 import { recoverMobileRelayPairing } from '../src/transport/mobile-relay-pairing-recovery'
 import { appUpdateChecker } from '../src/app-update/app-update-runtime'
@@ -78,6 +80,34 @@ export default function RootLayout() {
   }, [pathname, hostId, worktreeId, executionHost])
   const openNotificationRoute = useOpenNotificationRoute()
   usePairingLinks()
+
+  // Fork addition: orca://open links (see app/open.tsx) navigate exactly like a notification tap.
+  useEffect(
+    () =>
+      subscribeOpenLinks(async (link) => {
+        const hosts = await loadHostCatalog().catch(() => null)
+        const hostId = hosts ? resolveHostIdForFingerprint(link.hostFingerprint, hosts) : null
+        if (!hosts || !hostId) {
+          return
+        }
+        const target = getNotificationNavigationTarget(
+          {
+            hostId,
+            worktreeId: link.worktreeId,
+            ...(link.paneKey ? { paneKey: link.paneKey } : {}),
+            ...(link.executionHost ? { executionHost: link.executionHost } : {})
+          },
+          {
+            knownHostIds: new Set(hosts.map((host) => host.id)),
+            credentialStatusByHostId: new Map(hosts.map((host) => [host.id, host.credentialStatus]))
+          }
+        )
+        if (target) {
+          openNotificationRoute(target)
+        }
+      }),
+    [openNotificationRoute]
+  )
 
   useEffect(() => {
     // Reconcile the crash-persistent pairing journal before another scan can replace it.
@@ -205,6 +235,7 @@ export default function RootLayout() {
               />
               <Stack.Screen name="pair-scan" options={{ headerShown: false }} />
               <Stack.Screen name="pair" options={{ headerShown: false }} />
+              <Stack.Screen name="open" options={{ headerShown: false }} />
               <Stack.Screen name="pair-confirm" options={{ headerShown: false }} />
               <Stack.Screen
                 name="mobile-onboarding"
