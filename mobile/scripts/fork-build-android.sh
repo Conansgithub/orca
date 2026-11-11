@@ -13,7 +13,9 @@ OUT="${OUT:-$HOME/Downloads/orca-mobile-fork.apk}"
 pnpm install --frozen-lockfile
 pnpm exec vitest run src/navigation/open-links.test.ts
 npx expo prebuild --platform android --no-install --clean
-(cd android && ./gradlew assembleRelease)
+# Phones are arm64; ABIS="arm64-v8a,armeabi-v7a,x86,x86_64" builds the universal APK.
+(cd android && ./gradlew assembleRelease -PreactNativeArchitectures="${ABIS:-arm64-v8a}")
 cp android/app/build/outputs/apk/release/app-release.apk "$OUT"
-"$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$OUT" | grep 'SHA-256'
+APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/ | tail -1)apksigner"
+"$APKSIGNER" verify --print-certs "$OUT" | grep 'SHA-256'
 echo "built $OUT"
